@@ -4,49 +4,84 @@
 Example classifier on Numerai data using a logistic regression classifier.
 To get started, install the required packages: pip install pandas, numpy, sklearn
 """
-
-import pandas as pd
 import numpy as np
-from sklearn import metrics, preprocessing, linear_model
-
+import pandas as pd
+import matplotlib.pyplot as plt
+import math
+import cPickle
+import os
+import json
+import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder 
+from xgboost import XGBClassifier
+import random
+random.seed(0)
+# Force matplotlib to not use any Xwindows backend.
 
 def main():
     # Set seed for reproducibility
     np.random.seed(0)
 
+    training_data_path = os.path.join(os.environ['DATA_DIR'], 'numerai_training_data.csv')
+    prediction_data_path = os.path.join(os.environ['DATA_DIR'], 'numerai_tournament_data.csv')
     print("Loading data...")
     # Load the data from the CSV files
-    training_data = pd.read_csv('numerai_training_data.csv', header=0)
-    prediction_data = pd.read_csv('numerai_tournament_data.csv', header=0)
+    training_data = pd.read_csv(training_data_path, header=0)
+    prediction_data = pd.read_csv(prediction_data_path, header=0)
 
 
+    # Some clean up. Replace #DIV/0! with 0
+    # I think 0 is a reasonable, non-biasing number because if, e.g. #Months is 0, a spend per month of 0 is reasonable
+    training_data.replace(to_replace='#DIV/0!',value='0',inplace=True)
+    training_data.fillna(0, inplace=True)
+    prediction_data.replace(to_replace='#DIV/0!',value='0',inplace=True)
+    prediction_data.fillna(0, inplace=True)
     # Transform the loaded CSV data into numpy arrays
     features = [f for f in list(training_data) if "feature" in f]
     X = training_data[features]
     Y = training_data["target"]
-    x_prediction = prediction_data[features]
+    X_test = prediction_data[features]
+    Y_test = prediction_data["target"]
     ids = prediction_data["id"]
+    X.sort_index(axis=1, inplace=True)
+    X_test.sort_index(axis=1, inplace=True)
 
-    # This is your model that will learn to predict
-    model = linear_model.LogisticRegression(n_jobs=-1)
+    le = LabelEncoder()
+    training_data.reset_index( drop = True, inplace = True )
+    Y = le.fit_transform(Y)
+    X.fillna(0, inplace=True)
+    
+    #*** Split into training and testing data
+    X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.2)
+    X_train.sort_index(axis=1, inplace=True)
+    X_test.sort_index(axis=1,inplace=True)
+    X_val.sort_index(axis=1,inplace=True)
 
     print("Training...")
-    # Your model is trained on the training_data
-    model.fit(X, Y)
-
-    print("Predicting...")
-    # Your trained model is now used to make predictions on the numerai_tournament_data
-    # The model returns two columns: [probability of 0, probability of 1]
-    # We are just interested in the probability that the target is 1.
-    y_prediction = model.predict_proba(x_prediction)
-    results = y_prediction[:, 1]
+    model = XGBClassifier() 
+    model.fit(X_train, y_train)
+    #*** Test
+    y_val_pred = model.predict(X_val)
+    y_train_pred = model.predict(X_train)
+    test_acc = accuracy_score(y_val, y_val_pred)
+    train_acc = accuracy_score(y_train, y_train_pred)
+    y_test_pred = model.predict_proba(X_test)
+    results = y_test_pred[:, 1]
     results_df = pd.DataFrame(data={'probability':results})
     joined = pd.DataFrame(ids).join(results_df)
 
-    print("Writing predictions to predictions.csv")
+    # save the classifier
+    stats = {"train accuracy": train_acc,"test accuracy":test_acc, 'label':'initial model',}
     # Save the predictions out to a CSV file
-    joined.to_csv("predictions.csv", index=False)
-    # Now you can upload these predictions on numer.ai
+    predictions_path = os.path.join(os.environ['OUTPUT_DIR'], 'predictions.csv')
+    joined.to_csv(predictions_path, index=False)
+    model_filename = os.path.join(os.environ['OUTPUT_DIR'],'model.dat')
+    pickle.dump(model, open(model_filename, 'wb'))
+    stats_filename = os.path.join(os.environ['OUTPUT_DIR'],'stats.json')
+    with open(stats_filename, 'wb') as f:
+        f.write(json.dumps(stats))
 
 
 if __name__ == '__main__':
