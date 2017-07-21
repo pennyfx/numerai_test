@@ -15,7 +15,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder 
 from xgboost import XGBClassifier
-%matplotlib inline
 import random
 random.seed(0)
 # Force matplotlib to not use any Xwindows backend.
@@ -62,6 +61,9 @@ def main():
     print("Training...")
     model = XGBClassifier() 
     model.fit(X_train, y_train)
+    y_val_pred = model.predict(X_val)
+    y_train_pred = model.predict(X_train)
+    #*** Test
     test_acc = accuracy_score(y_val, y_val_pred)
     train_acc = accuracy_score(y_train, y_train_pred)
     y_test_pred = model.predict_proba(X_test)
