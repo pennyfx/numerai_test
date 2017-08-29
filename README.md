@@ -8,5 +8,6 @@ Model for numerai challenge built with xgboost algorithm
 To run analysis, run the jupter notebook using `datmo task run 'jupyter notebook' --port 8888`
 
 ## To run script
-Run the code in example_model.py 
+Run the code in example_model.py
 
+# Foo 2
